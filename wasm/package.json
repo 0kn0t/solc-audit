@@ -1,0 +1,17 @@
+{
+  "name": "solc-ast-rs",
+  "type": "module",
+  "description": "A normalized typed Solidity AST library - Rust port of solc-typed-ast",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "solc_ast_rs_bg.wasm",
+    "solc_ast_rs.js",
+    "solc_ast_rs.d.ts"
+  ],
+  "main": "solc_ast_rs.js",
+  "types": "solc_ast_rs.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
