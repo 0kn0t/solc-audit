@@ -189,15 +189,15 @@ export class StateVarGraph extends LitElement {
     }
 
     return html`
-      <h2>State Variable Compositional Analysis</h2>
-      ${this.scopeLabel ? html`<div style="color: var(--text-muted); font-size: 12px; margin-bottom: 12px;">Scoped to ${this.scopeLabel}</div>` : ''}
-      <div class="tabs">
+      <h2 style="flex-shrink: 0">State Variable Compositional Analysis</h2>
+      ${this.scopeLabel ? html`<div style="color: var(--text-muted); font-size: 12px; margin-bottom: 12px; flex-shrink: 0;">Scoped to ${this.scopeLabel}</div>` : ''}
+      <div class="tabs" style="flex-shrink: 0">
         <button class="${this.view === 'conflict' ? 'active' : ''}" @click=${() => this.view = 'conflict'}>Conflict Table</button>
         <button class="${this.view === 'heatmap' ? 'active' : ''}" @click=${() => this.view = 'heatmap'}>Coupling Heatmap</button>
         <button class="${this.view === 'bipartite' ? 'active' : ''}" @click=${() => this.view = 'bipartite'}>Bipartite Graph</button>
       </div>
       ${this.hasFilters ? html`
-        <div class="filter-bar">
+        <div class="filter-bar" style="flex-shrink: 0">
           <span class="filter-count">
             ${this.disabledVars.size > 0 ? `${this.disabledVars.size} vars hidden` : ''}
             ${this.disabledVars.size > 0 && this.disabledFuncs.size > 0 ? ', ' : ''}
@@ -228,13 +228,14 @@ export class StateVarGraph extends LitElement {
     }
 
     return html`
-      <div class="filter-hint">Click variable names or function badges to toggle visibility across all views</div>
-      <div class="legend">
+      <div class="filter-hint" style="flex-shrink:0">Click variable names or function badges to toggle visibility across all views</div>
+      <div class="legend" style="flex-shrink:0">
         <span class="legend-item"><span class="legend-dot" style="background: var(--accent)"></span> Reader</span>
         <span class="legend-item"><span class="legend-dot" style="background: var(--red)"></span> Writer</span>
         <span class="legend-item"><span class="legend-dot" style="background: var(--purple)"></span> Read+Write</span>
         <span class="legend-item"><span class="flag-badge flag-multi" style="font-size:9px">Multi-writer</span> 2+ functions write this var</span>
       </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding-bottom:20px">
       <table class="conflict-table">
         <thead>
           <tr>
@@ -293,6 +294,7 @@ export class StateVarGraph extends LitElement {
           })}
         </tbody>
       </table>
+      </div>
     `;
   }
 
@@ -321,7 +323,7 @@ export class StateVarGraph extends LitElement {
     }
 
     return html`
-      <div class="filter-hint">Click function names (row/column headers) to toggle visibility</div>
+      <div class="filter-hint" style="flex-shrink:0">Click function names (row/column headers) to toggle visibility</div>
       <div class="heatmap-container">
         <div class="heatmap">
           <table>
