@@ -474,24 +474,31 @@ export class PathInspector extends LitElement {
   private rangeString(range: VarRange): string {
     if (range.intervals.length > 0) {
       const parts = range.intervals.map(([lo, hi]) =>
-        lo === hi ? this.shortNum(lo) : `${this.shortNum(lo)}..${this.shortNum(hi)}`
+        lo === hi ? this.shortNum(lo) : `[${this.shortNum(lo)}, ${this.shortNum(hi)}]`
       );
       let s = parts.join(' \u222A ');
       if (range.exclusions.length > 0) {
-        s += ` \\ {${range.exclusions.map(e => this.shortNum(e)).join(',')}}`;
+        s += ` \u2209 {${range.exclusions.map(e => this.shortNum(e)).join(', ')}}`;
       }
       return s;
     }
     if (range.min !== null || range.max !== null) {
       return `[${range.min ? this.shortNum(range.min) : '0'}, ${range.max ? this.shortNum(range.max) : 'MAX'}]`;
     }
-    return 'TOP';
+    return '\u22A4 (any)';
   }
 
   private shortNum(s: string): string {
-    if (s === '115792089237316195423570985008687907853269984665640564039457584007913129639935') return 'MAX_UINT256';
-    if (s === '340282366920938463463374607431768211455') return 'MAX_UINT128';
-    if (s.length > 15) return s.slice(0, 6) + '..' + s.slice(-4);
+    // Well-known constants
+    if (s === '115792089237316195423570985008687907853269984665640564039457584007913129639935') return '2\u00B2\u2075\u2076-1';
+    if (s === '340282366920938463463374607431768211455') return '2\u00B9\u00B2\u2078-1';
+    if (s === '1461501637330902918203684832716283019655932542975') return '2\u00B9\u2076\u2070-1';
+    if (s === '18446744073709551615') return '2\u2076\u2074-1';
+    if (s === '4294967295') return '2\u00B3\u00B2-1';
+    if (s === '65535') return '2\u00B9\u2076-1';
+    if (s === '255') return '2\u2078-1';
+    // Truncate very long numbers with ellipsis (not ..)
+    if (s.length > 15) return s.slice(0, 6) + '\u2026' + s.slice(-4);
     return s;
   }
 

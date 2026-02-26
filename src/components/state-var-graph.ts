@@ -5,7 +5,7 @@ import type { StateVarAccess } from '../types';
 @customElement('state-var-graph')
 export class StateVarGraph extends LitElement {
   static styles = css`
-    :host { display: block; padding: 20px; overflow: auto; height: 100%; }
+    :host { display: flex; flex-direction: column; padding: 20px; overflow: hidden; height: 100%; box-sizing: border-box; }
     h2 { color: var(--text-primary); margin-bottom: 16px; font-size: 18px; }
     .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
     .tabs button {
@@ -74,7 +74,7 @@ export class StateVarGraph extends LitElement {
     .row-disabled { opacity: 0.3; }
 
     /* ── Coupling Heatmap ── */
-    .heatmap-container { overflow: auto; max-height: 100%; max-width: 100%; }
+    .heatmap-container { overflow: auto; flex: 1; min-height: 0; padding-bottom: 20px; }
     .heatmap table {
       font-size: 11px; border-collapse: separate; border-spacing: 0;
     }
@@ -113,7 +113,7 @@ export class StateVarGraph extends LitElement {
     .heatmap td.disabled-cell { opacity: 0.15; }
 
     /* ── Bipartite Graph ── */
-    .bipartite { overflow: auto; }
+    .bipartite { overflow: auto; flex: 1; min-height: 0; padding-bottom: 20px; }
     .bipartite svg { width: 100%; min-height: 300px; }
     .var-node { fill: var(--bg-tertiary); stroke: var(--border); }
     .var-node.disabled { fill: var(--bg-primary); stroke: var(--border); opacity: 0.3; }
