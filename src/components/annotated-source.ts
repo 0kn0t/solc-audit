@@ -22,6 +22,12 @@ interface DomainAnnotation {
   badge: 'narrowed' | 'truncation' | 'precision' | 'external' | 'assign' | 'info';
 }
 
+interface RangeAnnotation {
+  varName: string;
+  range: string;
+  kind: 'narrowed' | 'widened' | 'new' | 'unrestricted' | 'assign';
+}
+
 const RED_CHECKS = new Set(['Overflow', 'Underflow', 'DivByZero', 'UncheckedReturn']);
 const ORANGE_CHECKS = new Set(['DivisionTruncation', 'MulAfterDiv', 'RightShiftTruncation', 'DowncastTruncation']);
 
@@ -127,16 +133,16 @@ export class AnnotatedSource extends LitElement {
 
     /* ── Annotation column ── */
     .annotations {
-      width: 280px;
+      width: 320px;
       flex-shrink: 0;
       border-left: 1px solid var(--border);
       background: var(--bg-secondary);
       overflow: hidden;
     }
     .annotation-line {
-      height: 1.7em;
+      min-height: 1.7em;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       padding: 0 8px;
       overflow: hidden;
     }
@@ -153,11 +159,47 @@ export class AnnotatedSource extends LitElement {
     .ann-assign { color: #7dcfff; }
     .ann-info { color: var(--text-muted); }
 
-    /* ── Toggle button ── */
-    .toggle-annotations {
+    /* Range annotations (inline domain display) */
+    .range-annotations {
+      display: flex;
+      flex-direction: column;
+      padding-top: 1px;
+    }
+    .range-entry {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      line-height: 1.5;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .range-var { color: var(--yellow); }
+    .range-in { color: var(--text-muted); }
+    .range-val { color: var(--green); }
+    .range-val.narrowed { color: #9ece6a; }
+    .range-val.widened { color: var(--red); }
+    .range-val.new { color: var(--accent); }
+    .range-val.unrestricted { color: var(--orange); }
+    .range-val.assign { color: var(--cyan); }
+    .range-excl { color: var(--red); font-size: 9px; }
+
+    /* ── Toggle button + path label ── */
+    .ann-controls {
       position: absolute;
       right: 4px;
       top: 4px;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      z-index: 1;
+    }
+    .ann-path-label {
+      font-size: 10px; color: var(--text-muted);
+      background: var(--bg-secondary);
+      padding: 2px 6px; border-radius: 3px;
+      border: 1px solid var(--border);
+    }
+    .toggle-annotations {
       font-size: 10px;
       padding: 2px 6px;
       border-radius: 3px;
@@ -165,7 +207,6 @@ export class AnnotatedSource extends LitElement {
       background: var(--bg-secondary);
       color: var(--text-muted);
       cursor: pointer;
-      z-index: 1;
     }
     .toggle-annotations:hover { background: var(--bg-tertiary); }
 
@@ -435,40 +476,7 @@ export class AnnotatedSource extends LitElement {
       });
     }
 
-    // 2. Source-level annotations: detect patterns in source text
-    if (this.source) {
-      const lines = this.source.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        const lineNum = i + 1;
-        if (map.has(lineNum)) continue; // don't overwrite arith annotations
-        const line = lines[i];
-
-        // require/assert → narrowing point
-        if (/\brequire\s*\(/.test(line) || /\bassert\s*\(/.test(line)) {
-          map.set(lineNum, { text: '\u2193 NARROWING POINT', badge: 'narrowed' });
-        }
-        // External calls
-        else if (/\.call\s*[({]/.test(line) || /\.delegatecall\s*[({]/.test(line) ||
-                 /\.transfer\s*\(/.test(line) || /\.send\s*\(/.test(line)) {
-          map.set(lineNum, { text: '\u26A1 EXTERNAL CALL', badge: 'external' });
-        }
-      }
-    }
-
-    // 3. Multi-writer state vars (from stateVarAccess)
-    for (const sv of this.stateVarAccess) {
-      if (sv.writers.length > 1) {
-        const line = nodeToLine.get(sv.varId);
-        if (line && !map.has(line)) {
-          map.set(line, {
-            text: `MULTI-WRITER: ${sv.writers.map(w => w.funcName).join(', ')}`,
-            badge: 'info',
-          });
-        }
-      }
-    }
-
-    // 4. Unrestricted global ranges
+    // 2. Unrestricted global ranges
     for (const gr of this.globalRanges) {
       if (gr.min === null && gr.max === null) {
         const line = nodeToLine.get(gr.varId);
@@ -484,60 +492,133 @@ export class AnnotatedSource extends LitElement {
     return map;
   }
 
-  /** Lines in the currently selected path */
-  private get pathLineSet(): Set<number> {
-    if (this.selectedPathIndex == null || !this.pathDetail) return new Set();
-    const path = this.pathDetail[this.selectedPathIndex];
-    if (!path) return new Set();
+  /**
+   * Per-line range annotations: real variable domains from path analysis.
+   * Uses NodeId-based mapping (sourceNodeId → lineMap) instead of text matching.
+   * When a path is selected, shows ranges from that path.
+   * When no path is selected, shows ranges from the first feasible return path.
+   */
+  private get lineRangeAnnotations(): Map<number, RangeAnnotation[]> {
+    const map = new Map<number, RangeAnnotation[]>();
+    if (!this.pathDetail) return map;
 
-    const lines = new Set<number>();
+    let path: PathInfo | null = null;
+    if (this.selectedPathIndex != null) {
+      path = this.pathDetail[this.selectedPathIndex] ?? null;
+    } else {
+      // Auto-select: first feasible return path (most representative)
+      path = this.pathDetail.find(p => p.feasible && p.exit === 'return') ??
+             this.pathDetail.find(p => p.feasible) ?? null;
+    }
+    if (!path) return map;
+
     const nodeToLine = this.nodeIdToLine;
 
-    // Mark all lines that have nodeIds mentioned in path statements
-    for (const [nodeId, line] of nodeToLine) {
-      // Simple heuristic: if a line is in the function, include it
-      // More precise: match statement text to source lines
+    // Build previous cumulative ranges so we can classify changes
+    const cumulative: Record<string, VarRange> = {};
+
+    for (let si = 0; si < path.statements.length; si++) {
+      const stmt = path.statements[si];
+      if (typeof stmt === 'string') continue;
+      const info = stmt as StatementInfo;
+      if (!info.ranges || Object.keys(info.ranges).length === 0) {
+        continue;
+      }
+
+      // Map statement to source line via NodeId
+      const nodeId = info.sourceNodeId;
+      const lineNum = nodeId != null ? nodeToLine.get(nodeId) : undefined;
+      if (!lineNum) {
+        // Can't map to source — still update cumulative
+        Object.assign(cumulative, info.ranges);
+        continue;
+      }
+
+      const entries: RangeAnnotation[] = [];
+      for (const [varName, range] of Object.entries(info.ranges)) {
+        const rangeStr = this.formatRange(range);
+        const prev = cumulative[varName];
+        let kind: RangeAnnotation['kind'];
+
+        if (!prev) {
+          kind = 'new';
+        } else {
+          const prevStr = this.formatRange(prev);
+          if (prevStr === rangeStr) continue; // no change
+          if (rangeStr === 'TOP' || rangeStr.includes('2**256-1')) {
+            kind = 'unrestricted';
+          } else if (info.type === 'assign' || info.type === 'havoc') {
+            kind = 'assign';
+          } else {
+            kind = this.isNarrower(prev, range) ? 'narrowed' : 'widened';
+          }
+        }
+
+        entries.push({ varName, range: rangeStr, kind });
+      }
+
+      if (entries.length > 0) {
+        const existing = map.get(lineNum) ?? [];
+        existing.push(...entries);
+        map.set(lineNum, existing);
+      }
+
+      Object.assign(cumulative, info.ranges);
     }
-    return lines;
+
+    return map;
   }
 
-  /** Current step's highlighted line */
+  /** Check if range b is narrower than range a */
+  private isNarrower(a: VarRange, b: VarRange): boolean {
+    if (a.intervals.length > 0 && b.intervals.length > 0) {
+      try {
+        const aMin = BigInt(a.intervals[0][0]);
+        const aMax = BigInt(a.intervals[a.intervals.length - 1][1]);
+        const bMin = BigInt(b.intervals[0][0]);
+        const bMax = BigInt(b.intervals[b.intervals.length - 1][1]);
+        return (bMax - bMin) < (aMax - aMin);
+      } catch {
+        return false;
+      }
+    }
+    return b.exclusions.length > a.exclusions.length;
+  }
+
+  /** Lines in the currently selected path (via NodeId mapping) */
+  private get pathLineSet(): Set<number> {
+    return this.pathLineSetFromNodes;
+  }
+
+  /** Current step's highlighted line (via NodeId mapping) */
   private get stepLine(): number | null {
     if (this.selectedStepIndex == null || !this.pathDetail || this.selectedPathIndex == null) return null;
     const path = this.pathDetail[this.selectedPathIndex];
     if (!path) return null;
     const stmt = path.statements[this.selectedStepIndex];
     if (!stmt || typeof stmt === 'string') return null;
-    // Try to find the line via text matching
     const info = stmt as StatementInfo;
-    const text = info.text.trim();
-    if (!text) return null;
-
-    const lines = this.source.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      // Fuzzy match: check if the source line contains key parts of the statement
-      const srcTrim = lines[i].trim();
-      if (srcTrim && text.includes(srcTrim.replace(/;$/, '').trim())) {
-        return i + 1;
-      }
-    }
-    return null;
+    const nodeId = info.sourceNodeId;
+    if (nodeId == null) return null;
+    return this.nodeIdToLine.get(nodeId) ?? null;
   }
 
-  /** Ranges at current step for tooltip display */
-  private get stepRanges(): Record<string, VarRange> | null {
-    if (this.selectedStepIndex == null || !this.pathDetail || this.selectedPathIndex == null) return null;
+  /** pathLineSet: lines belonging to the selected path (via NodeId mapping) */
+  private get pathLineSetFromNodes(): Set<number> {
+    if (this.selectedPathIndex == null || !this.pathDetail) return new Set();
     const path = this.pathDetail[this.selectedPathIndex];
-    if (!path) return null;
-
-    const cumulative: Record<string, VarRange> = {};
-    for (let i = 0; i <= this.selectedStepIndex; i++) {
-      const stmt = path.statements[i];
-      if (typeof stmt !== 'string' && (stmt as StatementInfo).ranges) {
-        Object.assign(cumulative, (stmt as StatementInfo).ranges);
+    if (!path) return new Set();
+    const nodeToLine = this.nodeIdToLine;
+    const lines = new Set<number>();
+    for (const stmt of path.statements) {
+      if (typeof stmt === 'string') continue;
+      const info = stmt as StatementInfo;
+      if (info.sourceNodeId != null) {
+        const line = nodeToLine.get(info.sourceNodeId);
+        if (line) lines.add(line);
       }
     }
-    return Object.keys(cumulative).length > 0 ? cumulative : null;
+    return lines;
   }
 
   // ─── Render ───────────────────────────────────────────────────────
@@ -550,13 +631,30 @@ export class AnnotatedSource extends LitElement {
     const lines = this.source.split('\n');
     const risks = this.lineRisks;
     const annotations = this.lineAnnotations;
+    const rangeAnnotations = this.lineRangeAnnotations;
     const pathLines = this.pathLineSet;
     const currentStepLine = this.stepLine;
 
+    // Determine which path is being used for annotations
+    const annPath = this.selectedPathIndex != null
+      ? this.pathDetail?.[this.selectedPathIndex] ?? null
+      : this.pathDetail?.find(p => p.feasible && p.exit === 'return') ??
+        this.pathDetail?.find(p => p.feasible) ?? null;
+    const annPathLabel = annPath
+      ? (this.selectedPathIndex != null
+        ? `Path #${annPath.index}`
+        : `Path #${annPath.index} (auto)`)
+      : null;
+
     return html`
-      <button class="toggle-annotations"
-        @click=${() => this.showAnnotations = !this.showAnnotations}
-      >${this.showAnnotations ? 'Hide' : 'Show'} Annotations</button>
+      <div class="ann-controls">
+        ${annPathLabel && this.showAnnotations ? html`
+          <span class="ann-path-label">Ranges: ${annPathLabel}</span>
+        ` : nothing}
+        <button class="toggle-annotations"
+          @click=${() => this.showAnnotations = !this.showAnnotations}
+        >${this.showAnnotations ? 'Hide' : 'Show'} Annotations</button>
+      </div>
 
       ${this.tooltipInfo ? html`
         <div class="tooltip" style="left:${this.tooltipInfo.x}px;top:${this.tooltipInfo.y}px;">
@@ -606,7 +704,26 @@ export class AnnotatedSource extends LitElement {
           <div class="annotations">
             ${lines.map((_, i) => {
               const lineNum = i + 1;
+              const ranges = rangeAnnotations.get(lineNum);
               const ann = annotations.get(lineNum);
+
+              // Prefer range annotations (real domains) over static annotations
+              if (ranges && ranges.length > 0) {
+                return html`
+                  <div class="annotation-line">
+                    <div class="range-annotations">
+                      ${ranges.map(r => html`
+                        <div class="range-entry" title="${r.varName} ${r.range}">
+                          <span class="range-var">${r.varName}</span>
+                          <span class="range-in"> \u2208 </span>
+                          <span class="range-val ${r.kind}">${r.range}</span>
+                        </div>
+                      `)}
+                    </div>
+                  </div>
+                `;
+              }
+
               return html`
                 <div class="annotation-line">
                   ${ann ? html`
@@ -638,7 +755,7 @@ export class AnnotatedSource extends LitElement {
   private onLineHover(e: MouseEvent, lineNum: number) {
     const risks = this.lineRisks;
     const risk = risks.get(lineNum);
-    const stepRanges = this.stepRanges;
+    const ranges = this.lineRangeAnnotations.get(lineNum);
     const content: string[] = [];
 
     // Show line-level risk info
@@ -648,13 +765,10 @@ export class AnnotatedSource extends LitElement {
       }
     }
 
-    // Show variable domains at current step
-    if (stepRanges) {
-      const nodeIds = this.lineToNodeIds.get(lineNum);
-      if (nodeIds && nodeIds.length > 0) {
-        for (const [varName, range] of Object.entries(stepRanges)) {
-          content.push(`${varName}: ${this.formatRange(range)}`);
-        }
+    // Show variable domains from path analysis
+    if (ranges && ranges.length > 0) {
+      for (const r of ranges) {
+        content.push(`${r.varName} \u2208 ${r.range}`);
       }
     }
 
@@ -670,25 +784,33 @@ export class AnnotatedSource extends LitElement {
   private formatRange(range: VarRange): string {
     if (range.intervals.length > 0) {
       const parts = range.intervals.map(([lo, hi]) =>
-        lo === hi ? this.shortNum(lo) : `${this.shortNum(lo)}..${this.shortNum(hi)}`
+        lo === hi ? this.shortNum(lo) : `[ ${this.shortNum(lo)}, ${this.shortNum(hi)} ]`
       );
-      let s = parts.length > 1 ? parts.join(' \u222A ') : `[${parts[0]}]`;
+      let s = parts.length > 1 ? parts.join(' \u222A ') : parts[0];
       if (range.exclusions.length > 0) {
-        s += ` \\ {${range.exclusions.map(e => this.shortNum(e)).join(',')}}`;
+        s += ` \u2209 {${range.exclusions.map(e => this.shortNum(e)).join(', ')}}`;
       }
       return s;
     }
     if (range.min !== null || range.max !== null) {
-      return `[${range.min ? this.shortNum(range.min) : '0'}, ${range.max ? this.shortNum(range.max) : 'MAX'}]`;
+      return `[ ${range.min ? this.shortNum(range.min) : '0'}, ${range.max ? this.shortNum(range.max) : 'MAX'} ]`;
     }
     return 'TOP';
   }
 
-  /** Shorten large numbers: 2^256-1 → MAX_UINT256, etc. */
+  /** Shorten large numbers to readable forms */
   private shortNum(s: string): string {
-    if (s === '115792089237316195423570985008687907853269984665640564039457584007913129639935') return 'MAX_UINT256';
-    if (s === '340282366920938463463374607431768211455') return 'MAX_UINT128';
-    if (s.length > 12) return s.slice(0, 6) + '..' + s.slice(-4);
+    const known: Record<string, string> = {
+      '115792089237316195423570985008687907853269984665640564039457584007913129639935': '2**256-1',
+      '340282366920938463463374607431768211455': '2**128-1',
+      '18446744073709551615': '2**64-1',
+      '4294967295': '2**32-1',
+      '65535': '2**16-1',
+      '255': '2**8-1',
+      '1461501637330902918203684832716283019655932542975': '2**160-1',
+    };
+    if (known[s]) return known[s];
+    if (s.length > 15) return s.slice(0, 8) + '..' + s.slice(-4);
     return s;
   }
 

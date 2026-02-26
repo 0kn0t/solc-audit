@@ -169,6 +169,20 @@ export class PathInspector extends LitElement {
     .watch-step-label {
       font-size: 10px; color: var(--text-muted);
     }
+    .watch-toggle {
+      display: flex; align-items: center; gap: 4px;
+      margin-left: auto; font-size: 10px; color: var(--text-muted);
+      cursor: pointer; user-select: none;
+    }
+    .watch-toggle input { margin: 0; cursor: pointer; }
+    .watch-kind-badge {
+      font-size: 9px; padding: 0 3px; border-radius: 2px;
+      font-weight: 600; letter-spacing: 0.2px;
+    }
+    .kind-state { background: rgba(187,154,247,0.15); color: #bb9af7; }
+    .kind-param { background: rgba(122,162,247,0.15); color: var(--accent); }
+    .kind-local { background: rgba(125,207,255,0.15); color: #7dcfff; }
+    .kind-other { background: var(--bg-tertiary); color: var(--text-muted); }
 
     .watch-table {
       width: 100%;
@@ -204,6 +218,7 @@ export class PathInspector extends LitElement {
 
   @state() private selectedStepIndex = 0;
   @state() private filter: 'all' | 'return' | 'revert' | 'arith' = 'all';
+  @state() private showGlobalVars = false;
 
   private get filteredPaths(): { path: PathInfo; originalIndex: number }[] {
     if (!this.pathDetail) return [];
@@ -399,20 +414,40 @@ export class PathInspector extends LitElement {
 
     // Sort: recently changed first, then unrestricted highlighted
     const entries = [...cumulative.entries()]
+      .filter(([_, { range }]) => {
+        if (!this.showGlobalVars) {
+          const kind = range.kind ?? 'other';
+          if (kind === 'state') return false;
+        }
+        return true;
+      })
       .sort((a, b) => b[1].lastStep - a[1].lastStep);
+
+    const totalVars = cumulative.size;
+    const shownVars = entries.length;
 
     return html`
       <div class="watch-panel">
         <div class="watch-header">
           <span class="watch-title">Variable Watch</span>
-          <span class="watch-step-label">at step ${this.selectedStepIndex + 1}</span>
+          <span class="watch-step-label">at step ${this.selectedStepIndex + 1} (${shownVars}/${totalVars})</span>
+          <label class="watch-toggle">
+            <input type="checkbox" .checked=${this.showGlobalVars}
+              @change=${(e: Event) => { this.showGlobalVars = (e.target as HTMLInputElement).checked; }}>
+            State vars
+          </label>
         </div>
         ${entries.map(([name, { range, lastStep }]) => {
           const domainStr = this.rangeString(range);
           const isUnrestricted = domainStr === 'TOP' || domainStr.includes('MAX_UINT256');
+          const kind = range.kind ?? 'other';
+          const kindBadge = kind !== 'other' ? kind : '';
           return html`
             <div class="watch-row ${isUnrestricted ? 'unrestricted' : ''}">
-              <span class="watch-var-name" title="${name}">${name}</span>
+              <span class="watch-var-name" title="${name}">
+                ${kindBadge ? html`<span class="watch-kind-badge kind-${kind}">${kind}</span> ` : nothing}
+                ${name}
+              </span>
               <span class="watch-var-domain">${domainStr}</span>
               <span class="watch-var-step">#${lastStep + 1}</span>
             </div>

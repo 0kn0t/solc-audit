@@ -139,12 +139,14 @@ export interface VarRange {
   max: string | null;
   intervals: [string, string][];
   exclusions: string[];
+  kind?: 'state' | 'local' | 'param' | 'builtin' | 'other';
 }
 
 export interface StatementInfo {
   text: string;
   type: 'assert' | 'assertNot' | 'assign' | 'havoc' | 'checked' | 'call' | 'stmt';
   ranges: Record<string, VarRange>;
+  sourceNodeId?: number | null;
 }
 
 export interface PathInfo {

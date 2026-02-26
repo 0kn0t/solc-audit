@@ -8,43 +8,111 @@ export class StateVarGraph extends LitElement {
     :host { display: block; padding: 20px; overflow: auto; height: 100%; }
     h2 { color: var(--text-primary); margin-bottom: 16px; font-size: 18px; }
     .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-    .tabs button { font-size: 12px; padding: 4px 12px; }
-    .tabs button.active { background: var(--accent); color: var(--bg-primary); }
+    .tabs button {
+      font-size: 12px; padding: 4px 12px;
+      background: var(--bg-tertiary); color: var(--text-secondary);
+      border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    }
+    .tabs button:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .tabs button.active { background: var(--accent); color: var(--bg-primary); border-color: var(--accent); }
 
     .filter-hint {
-      font-size: 11px; color: var(--text-muted); margin-bottom: 12px;
+      font-size: 11px; color: var(--text-muted); margin-bottom: 10px;
       font-style: italic;
     }
 
-    /* Conflict table */
-    .conflict-table { font-size: 13px; }
-    .flag { color: var(--orange); font-weight: 600; }
-    .multi-writer { background: rgba(247, 118, 142, 0.1); }
-    .func-list { font-size: 12px; color: var(--text-secondary); }
-    .read-badge { color: var(--accent); font-size: 11px; }
-    .write-badge { color: var(--red); font-size: 11px; }
-    .rw-badge { color: var(--purple); font-size: 11px; }
+    /* ── Conflict Table ── */
+    .conflict-table {
+      width: 100%; border-collapse: collapse; font-size: 12px;
+      border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+    }
+    .conflict-table thead th {
+      background: var(--bg-tertiary); color: var(--text-muted);
+      font-weight: 600; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.5px; padding: 8px 10px; text-align: left;
+      border-bottom: 2px solid var(--border);
+      position: sticky; top: 0; z-index: 1;
+    }
+    .conflict-table td {
+      padding: 6px 10px; border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .conflict-table tr:last-child td { border-bottom: none; }
+    .conflict-table tbody tr { transition: background 0.1s; }
+    .conflict-table tbody tr:hover { background: var(--bg-hover); }
+    .conflict-table .var-name {
+      font-family: var(--font-mono); font-weight: 500; color: var(--text-primary);
+      cursor: pointer;
+    }
+    .conflict-table .var-name:hover { color: var(--accent); }
+    .conflict-table .var-name.disabled { opacity: 0.3; text-decoration: line-through; }
+    .conflict-table .type-col {
+      color: var(--cyan); font-family: var(--font-mono); font-size: 11px;
+      max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .conflict-table .contract-col { color: var(--text-muted); font-size: 11px; }
 
-    /* Coupling heatmap */
-    .heatmap-container { overflow: auto; }
-    .heatmap table { font-size: 11px; border-collapse: collapse; }
+    .func-badge {
+      display: inline-block; padding: 1px 6px; border-radius: 3px;
+      font-size: 10px; font-family: var(--font-mono); margin: 1px 2px;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    .func-badge:hover { filter: brightness(1.3); }
+    .func-badge.disabled { opacity: 0.25; text-decoration: line-through; }
+    .func-badge.reader { background: rgba(122,162,247,0.15); color: var(--accent); }
+    .func-badge.writer { background: rgba(247,118,142,0.15); color: var(--red); }
+    .func-badge.readwriter { background: rgba(187,154,247,0.15); color: var(--purple); }
+
+    .flag-badge {
+      display: inline-block; padding: 1px 6px; border-radius: 3px;
+      font-size: 10px; font-weight: 600; margin: 1px 2px;
+    }
+    .flag-multi { background: rgba(247,118,142,0.12); color: var(--red); }
+    .flag-rw { background: rgba(187,154,247,0.12); color: var(--purple); }
+
+    .row-multi-writer { background: rgba(247,118,142,0.05); }
+    .row-disabled { opacity: 0.3; }
+
+    /* ── Coupling Heatmap ── */
+    .heatmap-container { overflow: auto; max-height: 100%; max-width: 100%; }
+    .heatmap table {
+      font-size: 11px; border-collapse: separate; border-spacing: 0;
+    }
     .heatmap th {
-      max-width: 100px; overflow: hidden; text-overflow: ellipsis;
+      max-width: 120px; overflow: hidden; text-overflow: ellipsis;
       white-space: nowrap; font-size: 10px; padding: 4px;
+      font-family: var(--font-mono);
+      border: 1px solid var(--border);
     }
     .heatmap th.rotated {
       writing-mode: vertical-rl; transform: rotate(180deg);
       height: 100px; text-align: left;
+    }
+    /* Sticky top header row */
+    .heatmap thead th {
+      position: sticky; top: 0; z-index: 2;
+      background: var(--bg-primary);
+    }
+    /* Sticky left column (row headers) */
+    .heatmap th.row-header {
+      position: sticky; left: 0; z-index: 1;
+      background: var(--bg-primary);
+    }
+    /* Corner cell: sticky in both directions */
+    .heatmap th.corner {
+      position: sticky; top: 0; left: 0; z-index: 3;
+      background: var(--bg-primary);
     }
     .heatmap th.clickable { cursor: pointer; user-select: none; }
     .heatmap th.clickable:hover { color: var(--accent); }
     .heatmap th.disabled { opacity: 0.3; text-decoration: line-through; }
     .heatmap td {
       width: 28px; height: 28px; text-align: center; font-size: 10px;
-      border: 1px solid var(--bg-primary);
+      border: 1px solid var(--border);
     }
     .heatmap td.disabled-cell { opacity: 0.15; }
 
+    /* ── Bipartite Graph ── */
     .bipartite { overflow: auto; }
     .bipartite svg { width: 100%; min-height: 300px; }
     .var-node { fill: var(--bg-tertiary); stroke: var(--border); }
@@ -60,6 +128,7 @@ export class StateVarGraph extends LitElement {
     .clickable-node { cursor: pointer; }
     .clickable-node:hover text { fill: var(--accent); }
 
+    /* ── Filter Bar ── */
     .filter-bar {
       display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
       margin-bottom: 10px;
@@ -71,6 +140,16 @@ export class StateVarGraph extends LitElement {
     }
     .filter-bar button:hover { border-color: var(--accent); color: var(--accent); }
     .filter-count { font-size: 10px; color: var(--text-muted); }
+
+    /* ── Legend ── */
+    .legend {
+      display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 10px; font-size: 10px; color: var(--text-muted);
+    }
+    .legend-item { display: flex; align-items: center; gap: 4px; }
+    .legend-dot {
+      width: 8px; height: 8px; border-radius: 2px; display: inline-block;
+    }
   `;
 
   @property({ type: Array }) data: StateVarAccess[] = [];
@@ -134,50 +213,80 @@ export class StateVarGraph extends LitElement {
   }
 
   private renderConflictTable() {
+    // Build a lookup: funcId → set of varIds it writes, for R+W badge per-func
+    const funcWriteVars = new Map<number, Set<number>>();
+    const funcReadVars = new Map<number, Set<number>>();
+    for (const v of this.data) {
+      for (const w of v.writers) {
+        if (!funcWriteVars.has(w.funcId)) funcWriteVars.set(w.funcId, new Set());
+        funcWriteVars.get(w.funcId)!.add(v.varId);
+      }
+      for (const r of v.readers) {
+        if (!funcReadVars.has(r.funcId)) funcReadVars.set(r.funcId, new Set());
+        funcReadVars.get(r.funcId)!.add(v.varId);
+      }
+    }
+
     return html`
       <div class="filter-hint">Click variable names or function badges to toggle visibility across all views</div>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-dot" style="background: var(--accent)"></span> Reader</span>
+        <span class="legend-item"><span class="legend-dot" style="background: var(--red)"></span> Writer</span>
+        <span class="legend-item"><span class="legend-dot" style="background: var(--purple)"></span> Read+Write</span>
+        <span class="legend-item"><span class="flag-badge flag-multi" style="font-size:9px">Multi-writer</span> 2+ functions write this var</span>
+      </div>
       <table class="conflict-table">
         <thead>
           <tr>
-            <th>Variable</th><th>Type</th><th>Contract</th>
-            <th>Readers</th><th>Writers</th><th>Flags</th>
+            <th>Variable</th>
+            <th>Type</th>
+            <th>Contract</th>
+            <th>Access</th>
+            <th>Flags</th>
           </tr>
         </thead>
         <tbody>
           ${this.data.map(v => {
             const isVarDisabled = this.disabledVars.has(v.varId);
             const multiWriter = v.writers.length > 1;
-            const rwFuncs = v.readers.filter(r => v.writers.some(w => w.funcId === r.funcId));
+            const rwFuncIds = new Set(
+              v.readers.filter(r => v.writers.some(w => w.funcId === r.funcId)).map(r => r.funcId)
+            );
+            // Merge readers and writers into a single list with access type
+            const allFuncIds = new Map<number, { name: string; reads: boolean; writes: boolean }>();
+            for (const r of v.readers) {
+              if (!allFuncIds.has(r.funcId)) allFuncIds.set(r.funcId, { name: r.funcName, reads: false, writes: false });
+              allFuncIds.get(r.funcId)!.reads = true;
+            }
+            for (const w of v.writers) {
+              if (!allFuncIds.has(w.funcId)) allFuncIds.set(w.funcId, { name: w.funcName, reads: false, writes: false });
+              allFuncIds.get(w.funcId)!.writes = true;
+            }
+
             return html`
-              <tr class="${multiWriter && !isVarDisabled ? 'multi-writer' : ''}" style="${isVarDisabled ? 'opacity: 0.3' : ''}">
+              <tr class="${multiWriter && !isVarDisabled ? 'row-multi-writer' : ''} ${isVarDisabled ? 'row-disabled' : ''}">
                 <td>
-                  <span style="cursor: pointer; ${isVarDisabled ? 'text-decoration: line-through' : ''}"
-                        title="Click to ${isVarDisabled ? 'show' : 'hide'}"
+                  <span class="var-name ${isVarDisabled ? 'disabled' : ''}"
+                        title="Click to ${isVarDisabled ? 'show' : 'hide'} ${v.varName}"
                         @click=${() => this.toggleVar(v.varId)}>
                     ${v.varName}
                   </span>
                 </td>
-                <td style="color: var(--cyan); font-size: 12px;">${v.typeString}</td>
-                <td style="color: var(--text-muted)">${v.contractName}</td>
-                <td class="func-list">
-                  ${v.readers.map(r => {
-                    const dis = this.disabledFuncs.has(r.funcId);
-                    return html`<span class="read-badge" style="cursor: pointer; ${dis ? 'opacity: 0.3; text-decoration: line-through' : ''}"
-                      title="Click to ${dis ? 'show' : 'hide'} ${r.funcName}"
-                      @click=${() => this.toggleFunc(r.funcId)}>${r.funcName}</span> `;
-                  })}
-                </td>
-                <td class="func-list">
-                  ${v.writers.map(w => {
-                    const dis = this.disabledFuncs.has(w.funcId);
-                    return html`<span class="write-badge" style="cursor: pointer; ${dis ? 'opacity: 0.3; text-decoration: line-through' : ''}"
-                      title="Click to ${dis ? 'show' : 'hide'} ${w.funcName}"
-                      @click=${() => this.toggleFunc(w.funcId)}>${w.funcName}</span> `;
+                <td class="type-col" title="${v.typeString}">${v.typeString}</td>
+                <td class="contract-col">${v.contractName}</td>
+                <td>
+                  ${[...allFuncIds.entries()].map(([fid, info]) => {
+                    const dis = this.disabledFuncs.has(fid);
+                    const cls = info.reads && info.writes ? 'readwriter' : info.writes ? 'writer' : 'reader';
+                    const label = info.reads && info.writes ? 'R+W' : info.writes ? 'W' : 'R';
+                    return html`<span class="func-badge ${cls} ${dis ? 'disabled' : ''}"
+                      title="${info.name} (${label}) — click to ${dis ? 'show' : 'hide'}"
+                      @click=${() => this.toggleFunc(fid)}>${info.name}</span>`;
                   })}
                 </td>
                 <td>
-                  ${multiWriter ? html`<span class="flag">Multi-writer</span> ` : ''}
-                  ${rwFuncs.length > 0 ? html`<span class="flag">R+W</span>` : ''}
+                  ${multiWriter ? html`<span class="flag-badge flag-multi">Multi-writer</span>` : ''}
+                  ${rwFuncIds.size > 0 ? html`<span class="flag-badge flag-rw">R+W</span>` : ''}
                 </td>
               </tr>
             `;
@@ -188,8 +297,6 @@ export class StateVarGraph extends LitElement {
   }
 
   private renderHeatmap() {
-    // Build function coupling matrix: shared state var count
-    // Only count vars that are not disabled
     const activeVarIds = new Set(this.activeData.map(v => v.varId));
     const varIdToName = new Map(this.data.map(v => [v.varId, v.varName]));
 
@@ -218,20 +325,23 @@ export class StateVarGraph extends LitElement {
       <div class="heatmap-container">
         <div class="heatmap">
           <table>
-            <tr>
-              <th></th>
-              ${funcs.map(f => {
-                const dis = this.disabledFuncs.has(f.id);
-                return html`<th class="rotated clickable ${dis ? 'disabled' : ''}"
-                  title="${f.name} — click to ${dis ? 'show' : 'hide'}"
-                  @click=${() => this.toggleFunc(f.id)}>${f.name}</th>`;
-              })}
-            </tr>
+            <thead>
+              <tr>
+                <th class="corner"></th>
+                ${funcs.map(f => {
+                  const dis = this.disabledFuncs.has(f.id);
+                  return html`<th class="rotated clickable ${dis ? 'disabled' : ''}"
+                    title="${f.name} — click to ${dis ? 'show' : 'hide'}"
+                    @click=${() => this.toggleFunc(f.id)}>${f.name}</th>`;
+                })}
+              </tr>
+            </thead>
+            <tbody>
             ${funcs.map(row => {
               const rowDis = this.disabledFuncs.has(row.id);
               return html`
               <tr>
-                <th class="clickable ${rowDis ? 'disabled' : ''}"
+                <th class="row-header clickable ${rowDis ? 'disabled' : ''}"
                     title="${row.name} — click to ${rowDis ? 'show' : 'hide'}"
                     style="text-align: right; padding-right: 8px;"
                     @click=${() => this.toggleFunc(row.id)}>
@@ -261,6 +371,7 @@ export class StateVarGraph extends LitElement {
                 })}
               </tr>
             `})}
+            </tbody>
           </table>
         </div>
       </div>
